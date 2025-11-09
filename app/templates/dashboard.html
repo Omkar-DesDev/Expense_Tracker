@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<style>
+  /* small, template-scoped enhancements */
+  .stat-card { border-radius: 12px; box-shadow: 0 6px 18px rgba(20,20,20,0.06); }
+  .small-muted { font-size: 0.85rem; color: #6c757d; }
+  .category-badge { font-size: 0.75rem; padding: 0.35rem 0.55rem; border-radius: 0.45rem; }
+  .table thead th { vertical-align: middle; }
+  .actions-row { display:flex; gap:0.5rem; align-items:center; }
+</style>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div class="d-flex gap-3 align-items-center">
+    <h2 class="mb-0">Dashboard</h2>
+    <div class="small-muted">Overview of your expenses</div>
+  </div>
+
+  <div class="actions-row">
+    <a href="{{ url_for('expense.create_expense') }}" class="btn btn-primary">
+      + Add Expense
+    </a>
+
+    <!-- Export dropdown -->
+    <div class="btn-group">
+      <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+        Export
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="#" onclick="submitExport('csv'); return false;">Export CSV</a></li>
+        <li><a class="dropdown-item" href="#" onclick="submitExport('xlsx'); return false;">Export Excel (.xlsx)</a></li>
+        <li><a class="dropdown-item" href="#" onclick="submitExport('pdf'); return false;">Export PDF</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden export form (preserves filters) -->
+<form id="exportForm" method="GET" action="{{ url_for('main.export_expenses') }}" style="display:none;">
+  <input type="hidden" name="format" id="exportFormat" value="csv">
+  <input type="hidden" name="category" value="{{ request.args.get('category','') }}">
+  <input type="hidden" name="start" value="{{ request.args.get('start','') }}">
+  <input type="hidden" name="end" value="{{ request.args.get('end','') }}">
+  <input type="hidden" name="sort" value="{{ request.args.get('sort','') }}">
+</form>
+
+<!-- Summary cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="p-3 stat-card bg-white">
+      <div class="d-flex justify-content-between">
+        <div>
+          <small class="small-muted">Total Expenses</small>
+          <div class="h4 mt-1">₹{{ '%.2f'|format(total) }}</div>
+        </div>
+        <div class="text-end">
+          <small class="small-muted">Visible</small>
+          <div class="h5 mt-1">₹{{ '%.2f'|format(visible_total if visible_total is defined else 0) }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="p-3 stat-card bg-white">
+      <small class="small-muted">Transactions</small>
+      <div class="h4 mt-1">{{ expenses|length }}</div>
+      <div class="small-muted">Showing filtered results</div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="p-3 stat-card bg-white">
+      <small class="small-muted">Top Category</small>
+      <div class="h5 mt-1">
+        {% if categories %}
+          {% set top = categories | sort(attribute='total', reverse=true) | first %}
+          {{ top.category }} — ₹{{ '%.2f'|format(top.total) }}
+        {% else %}
+          N/A
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters & Table -->
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card mb-3">
+      <div class="card-body">
+        <!-- Filters -->
+        <form class="row g-2 mb-3" method="GET">
+          <div class="col-sm-4">
+            <select name="category" class="form-select">
+              <option value="">All Categories</option>
+              {% for c in ['Food','Transport','Shopping','Bills','Entertainment','Other'] %}
+              <option value="{{ c }}" {% if request.args.get('category')==c %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-sm-2">
+            <input type="date" name="start" class="form-control" value="{{ request.args.get('start','') }}">
+          </div>
+
+          <div class="col-sm-2">
+            <input type="date" name="end" class="form-control" value="{{ request.args.get('end','') }}">
+          </div>
+
+          <div class="col-sm-3">
+            <select name="sort" class="form-select">
+              <option value="date_desc">Date (newest)</option>
+              <option value="date_asc" {% if request.args.get('sort')=='date_asc' %}selected{% endif %}>Date (oldest)</option>
+              <option value="amount_desc" {% if request.args.get('sort')=='amount_desc' %}selected{% endif %}>Amount (high)</option>
+              <option value="amount_asc" {% if request.args.get('sort')=='amount_asc' %}selected{% endif %}>Amount (low)</option>
+            </select>
+          </div>
+
+          <div class="col-sm-1 d-grid">
+            <button class="btn btn-primary">Apply</button>
+          </div>
+        </form>
+
+        <!-- Table -->
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th class="text-end">Amount</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in expenses %}
+              <tr>
+                <td>{{ e.date.strftime('%Y-%m-%d') if e.date else '' }}</td>
+                <td>{{ e.title }}</td>
+                <td>
+                  {% if e.category == 'Food' %}
+                    <span class="badge bg-danger category-badge">{{ e.category }}</span>
+                  {% elif e.category == 'Transport' %}
+                    <span class="badge bg-info text-dark category-badge">{{ e.category }}</span>
+                  {% elif e.category == 'Shopping' %}
+                    <span class="badge bg-warning text-dark category-badge">{{ e.category }}</span>
+                  {% elif e.category == 'Bills' %}
+                    <span class="badge bg-secondary category-badge">{{ e.category }}</span>
+                  {% elif e.category == 'Entertainment' %}
+                    <span class="badge bg-success category-badge">{{ e.category }}</span>
+                  {% else %}
+                    <span class="badge bg-primary category-badge">{{ e.category }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">₹{{ '%.2f'|format(e.amount) }}</td>
+                <td>
+                  <a href="{{ url_for('expense.edit_expense', expense_id=e.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                  <form method="POST" action="{{ url_for('expense.delete_expense', expense_id=e.id) }}" style="display:inline-block;" onsubmit="return confirm('Delete this expense?');">
+                    <button class="btn btn-sm btn-outline-danger">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="5" class="text-center small-muted">No expenses found.</td></tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="table-light">
+                <td colspan="3"><strong>Grand Total</strong></td>
+                <td class="text-end"><strong>₹{{ '%.2f'|format(visible_total if visible_total is defined else 0) }}</strong></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: charts + quick stats -->
+  <div class="col-lg-4">
+    <div class="card mb-3 p-3">
+      <h6 class="mb-3">Monthly Spending</h6>
+      <canvas id="monthlyChart" style="max-width:100%;"></canvas>
+    </div>
+
+    <div class="card p-3">
+      <h6 class="mb-3">Category Distribution</h6>
+      <canvas id="categoryChart" style="max-width:100%;"></canvas>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Put JSON data in safe script tags to avoid Jinja/JS interpolation problems -->
+<script id="monthly-data" type="application/json">
+  {{ monthly_json | safe if monthly_json is defined else (monthly|tojson|safe if monthly is defined else '[]') }}
+</script>
+
+<script id="categories-data" type="application/json">
+  {{ categories_json | safe if categories_json is defined else (categories|tojson|safe if categories is defined else '[]') }}
+</script>
+
+<script>
+  // Read JSON textContent from the script tags and parse it in plain JS.
+  function readJSONFromScript(id) {
+    try {
+      const el = document.getElementById(id);
+      if (!el) return [];
+      // textContent contains the JSON literal produced by Jinja/Markup/json.dumps
+      const txt = el.textContent && el.textContent.trim();
+      if (!txt) return [];
+      return JSON.parse(txt);
+    } catch (err) {
+      console.error('Failed to parse JSON from', id, err);
+      return [];
+    }
+  }
+
+  const monthlyData = readJSONFromScript('monthly-data');
+  const categoryData = readJSONFromScript('categories-data');
+
+  // safety: ensure arrays
+  const safeMonthly = Array.isArray(monthlyData) ? monthlyData : [];
+  const safeCategories = Array.isArray(categoryData) ? categoryData : [];
+
+  // draw charts (drawCharts is loaded from static/js/charts.js)
+  drawCharts(safeMonthly, safeCategories);
+
+  // export helper (keeps existing export hidden form behavior)
+  function submitExport(fmt){
+    const f = document.getElementById('exportFormat');
+    if (f) f.value = fmt;
+    const form = document.getElementById('exportForm');
+    if (form) form.submit();
+  }
+</script>
+{% endblock %}

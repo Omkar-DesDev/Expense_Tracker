@@ -1,0 +1,59 @@
+PERSONAL EXPENSE TRACKER - INSTALLATION GUIDE (Step-by-step)
+
+1) Prerequisites
+   - Python 3.8+ installed
+   - Git (optional)
+   - (Windows) Recommended: use PowerShell or Command Prompt
+   - (Linux/Mac) Terminal
+
+2) Download & extract
+   - Extract the provided zip into a folder, e.g. C:\Projects\Personal_Expense_Tracker or ~/Projects/Personal_Expense_Tracker
+
+3) Create and activate virtual environment
+   - Windows (PowerShell):
+     python -m venv venv
+     .\venv\Scripts\Activate.ps1
+   - Windows (cmd.exe):
+     python -m venv venv
+     venv\Scripts\activate
+   - Linux / Mac:
+     python3 -m venv venv
+     source venv/bin/activate
+
+4) Install dependencies
+   pip install -r requirements.txt
+
+5) Copy env file
+   - Copy .env.example to .env and set a SECRET_KEY. Example (Windows PowerShell):
+     copy .env.example .env
+     # Open .env and set SECRET_KEY
+   - Example .env content:
+     SECRET_KEY=replace_with_a_secret_key
+     DATABASE_URL=sqlite:///personal_expense.db
+
+6) Initialize database and migrations
+   - Initialize migrations (first time only):
+     flask db init
+   - Create migration:
+     flask db migrate -m "initial"
+   - Apply migration:
+     flask db upgrade
+   Note: if `flask` command is not found, run with python -m flask ... or set FLASK_APP=manage.py
+
+7) Run the app
+   - python manage.py run
+   - or: flask run
+   - Browse to http://127.0.0.1:5000
+
+8) Default flow
+   - Register a new user (Register link)
+   - Add Expenses via Add Expense
+   - View Dashboard, charts, filters, totals
+
+9) Troubleshooting
+   - ModuleNotFoundError: ensure virtualenv activated and requirements installed.
+   - If migration errors occur, delete migrations folder and run `flask db init` again (only for local development).
+   - For production, use PostgreSQL and proper SECRET_KEY, and set environment variables securely.
+
+10) Optional: Supabase Auth integration
+   - If you want to use Supabase for authentication, set SUPABASE_URL and SUPABASE_KEY in .env and update auth routes to call Supabase SDK.
